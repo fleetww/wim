@@ -23,7 +23,8 @@ char processInput();
 
 //Editor management
 unsigned int nextTabCol(unsigned int currCol);
-void moveCursor(int dy, int dx);
+void moveCursorUp();
+void moveCursorDown();
 void moveCursorLeft();
 void moveCursorRight();
 void scrollEditor(int amt);

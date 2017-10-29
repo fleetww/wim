@@ -18,6 +18,7 @@
 typedef unsigned int uint;
 
 /*** Data ***/
+
 /*
  *	Represents one line in the open file
  */
@@ -107,6 +108,10 @@ void init() {
 }
 
 /*** File I/O ***/
+
+/*
+ *	Allocates space for new line, copies over the text, not null-terminated
+ */
 void dataAppendLine(char *newtext, size_t length) {
 	GS.data->lines = realloc(GS.data->lines, sizeof(Line) * (++GS.data->numLines));
 	Line *line = &(GS.data->lines[GS.data->numLines-1]);
@@ -116,6 +121,9 @@ void dataAppendLine(char *newtext, size_t length) {
 	return;
 }
 
+/*
+ *	Reads in the file, loading line by line into the data structure
+ */
 void loadFile(char *filename) {
 	FILE *file = fopen(filename, "r");
 	if (!file) {
@@ -145,6 +153,9 @@ void loadFile(char *filename) {
 
 /*** User I/O ***/
 
+/*
+ *	Read in a single character from keyboard, non blocking, and handle it
+ */
 char processInput() {
 	int ch = wgetch(stdscr);
 	switch (ch) {
@@ -162,10 +173,10 @@ char processInput() {
 			GS.dirtyEditor = true;
 			break;
 		case KEY_UP:
-			moveCursor(-1, 0);
+			moveCursorUp();
 			break;
 		case KEY_DOWN:
-			moveCursor(1, 0);
+			moveCursorDown();
 			break;
 		case KEY_LEFT:
 			moveCursorLeft();
@@ -179,6 +190,11 @@ char processInput() {
 }
 
 /*** Editor management ***/
+
+/*
+ *	Move editor up/down by amount
+ *	might be replaced soon
+ */
 void scrollEditor(int amt) {
 	uint temp = GS.lineOffset + amt;
 	//Underflow
@@ -194,7 +210,137 @@ void scrollEditor(int amt) {
 	return;
 }
 
+/*
+ *	Moves the cursor up by one line, scrolling, and moving cursor appropriately
+ *	in the new line
+ */
+void moveCursorUp() {
+	uint X = GS.cursX;
+	uint Y = GS.cursY;
+	uint currLine = Y + GS.lineOffset;
+	Line *line = (GS.data->lines + currLine);
 
+	if (currLine == 0) { //top of the file, nothing to do
+		return;
+	}
+
+	if (Y == 0) {
+		GS.lineOffset--;
+		GS.dirtyEditor = true;
+	} else {
+		Y--;
+	}
+
+	currLine = Y + GS.lineOffset;
+	line = (GS.data->lines + currLine);
+	uint currCell = X + GS.colOffset;
+
+	//validate X position in file
+	//find closes valid position, that is <= X
+	uint cellLen = 0;
+	uint prevCellLen = 0;
+	uint jumpCell = 0;
+	for (uint i = 0; i < (line->len - 1); i++) {
+		char ch = line->text[i];
+
+		prevCellLen = cellLen;
+		if (ch == '\t') {
+			cellLen = nextTabCol(cellLen);
+		} else {
+			cellLen++;
+		}
+
+		if (prevCellLen <= currCell && currCell < cellLen) {
+			jumpCell = prevCellLen;
+		} else if (currCell == cellLen) {
+			jumpCell = cellLen;
+		}
+	}
+
+	if (cellLen < currCell) {
+		jumpCell = cellLen;
+	}
+
+	if (jumpCell < GS.colOffset) {
+		GS.colOffset = jumpCell;
+		GS.dirtyEditor = true;
+	}
+
+	X = jumpCell;
+	GS.cursX = X;
+	GS.cursY = Y;
+	wmove(stdscr, Y, X);
+
+	return;
+}
+
+/*
+ *	Moves the cursor down by one line, scrolling, and moving cursor
+ *	appropriately in new line
+ */
+void moveCursorDown() {
+	uint X = GS.cursX;
+	uint Y = GS.cursY;
+	uint currLine = Y + GS.lineOffset;
+	Line *line = (GS.data->lines + currLine);
+
+	if (currLine == (GS.data->numLines - 1)) { //one past last line
+		return;
+	}
+
+	if (Y == GS.maxY - 1) {
+		GS.lineOffset++;
+		GS.dirtyEditor = true;
+	} else {
+		Y++;
+	}
+
+	currLine = Y + GS.lineOffset;
+	line = (GS.data->lines + currLine);
+	uint currCell = X + GS.colOffset;
+
+	//validate X position in file
+	uint cellLen = 0;
+	uint prevCellLen = 0;
+	uint jumpCell = 0;
+	for (uint i = 0; i < (line->len - 1); i++) {
+		char ch = line->text[i];
+
+		prevCellLen = cellLen;
+		if (ch == '\t') {
+			cellLen = nextTabCol(cellLen);
+		} else {
+			cellLen++;
+		}
+
+		if (prevCellLen <= currCell && currCell < cellLen) {
+			jumpCell = prevCellLen;
+		} else if (currCell == cellLen) {
+			jumpCell = cellLen;
+		}
+	}
+
+	if (cellLen < currCell) {
+		jumpCell = cellLen;
+	}
+
+	if (jumpCell < GS.colOffset) {
+		GS.colOffset = jumpCell;
+		GS.dirtyEditor = true;
+	}
+
+	X = jumpCell;
+	GS.cursX = X;
+	GS.cursY = Y;
+	wmove(stdscr, Y, X);
+
+	return;
+}
+
+/*
+ *	Moves cursor left by one character in line, panning editor left if
+ *	necessary
+ */
 void moveCursorLeft() {
 	uint X = GS.cursX;
 	uint Y = GS.cursY;
@@ -239,6 +385,9 @@ void moveCursorLeft() {
 	return;
 }
 
+/*
+ *	Moves cursor right by one character in line, panning editor if necessary
+ */
 void moveCursorRight() {
 	uint X = GS.cursX;
 	uint Y = GS.cursY;
@@ -287,85 +436,23 @@ void moveCursorRight() {
 	return;
 }
 
-void moveCursor(int dy, int dx) {
-	uint newY = GS.cursY + dy;
-	uint newX = GS.cursX + dx;
-	uint currLine = GS.cursY + GS.lineOffset;
-	uint currCol = GS.cursX + GS.colOffset;
-	uint newLine = newY + GS.lineOffset;
-	uint newCol = newX + GS.colOffset;
 
-	if (dy < 0 && newY > GS.cursY) { //moved cursor above screen
-		newY = 0;
-		scrollEditor(dy);
-		GS.dirtyEditor = true;
-	} else if (dy > 0 && newY > GS.maxY) {
-		newY = GS.maxY;
-		scrollEditor(dy);
-		GS.dirtyEditor = true;
-	}
-	//TODO correct for when cursor is past line
-
-
-
-	GS.cursY = newY;
-	GS.cursX = newX;
-	wmove(stdscr, GS.cursY, GS.cursX);
-
-	return;
-}
-
-void moveCursorOld(int dy, int dx) {
-	uint newY = GS.cursY + dy;
-	uint newX = GS.cursX + dx;
-	uint currLine = GS.cursY + GS.lineOffset; //in file
-	uint currCol = GS.cursX + GS.colOffset; //in file
-
-	uint newLine = newY + GS.lineOffset;
-
-	if (newLine == GS.data->numLines + 1) { //end of file
-		newY = GS.cursY; //Just past last line visually
-		newX = 0;
-	} else if (dy < 0 && newY > GS.cursY) { //moved cursor above screen
-		newY = 0;
-		scrollEditor(-1);
-		GS.dirtyEditor = true;
-	} else if (dy > 0 && newY > GS.maxY) { //moved cursor below screen
-		newY = GS.maxY;
-		scrollEditor(1);
-		GS.dirtyEditor = true;
-	}
-
-	currLine = GS.lineOffset + newY;
-	if ((newX + GS.colOffset) >= GS.data->lines[currLine].len) {
-		newX = (GS.data->lines[currLine].len - 2); //end of line visually
-	}
-
-	if (dx < 0 && newX > GS.cursX) { //moved cursor left of screen
-		newX = 0;
-		GS.colOffset = (!currCol)? 0 : GS.colOffset - 1;
-		GS.dirtyEditor = true;
-	} else if (dx > 0 && newX > GS.maxX) {
-		newX = GS.maxX - 1;
-	}
-
-	GS.cursY = newY;
-	GS.cursX = newX;
-	wmove(stdscr, GS.cursY, GS.cursX);
-
-	return;
-}
-
+/*
+ *	Helper function, just gives next tab collumn
+ */
 unsigned int nextTabCol(unsigned int currCol) {
 	return ( (uint)(currCol / TABSIZE) + 1) * TABSIZE;
 }
 
+/*
+ *	Prints text file to the screen, using offsets to fit correct info in screen
+ */
 void updateEditor() {
 	getmaxyx(stdscr, GS.maxY, GS.maxX);
 	wmove(stdscr, 0, 0);
 	wclear(stdscr);
 
-	for (uint i = 0; i < GS.maxY - 2; i++) {
+	for (uint i = 0; i < GS.maxY; i++) {
 		uint currLine = i + GS.lineOffset;
 		wmove(stdscr, i, 0);
 		if (currLine >= GS.data->numLines) {
