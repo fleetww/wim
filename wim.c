@@ -227,7 +227,8 @@ void moveCursorLeft() {
 	if (jumpCell < GS.colOffset) {
 		//pan left necessary amount, set X=0
 		X = 0;
-		GS.colOffset -= jumpCell;
+		GS.colOffset = jumpCell;
+		GS.dirtyEditor = true;
 	} else {
 		X = jumpCell - GS.colOffset;
 	}
@@ -273,8 +274,9 @@ void moveCursorRight() {
 	}
 
 	if ((jumpCell - GS.colOffset) >= GS.maxX) { //next char is past screen
-		GS.colOffset += jumpCell;
-		X = 0; //a little ugly visually, but it does work
+		GS.colOffset += jumpCell - (GS.colOffset + X);
+		X += jumpCell - (GS.colOffset + X); //a little ugly visually, but it does work
+		GS.dirtyEditor = true;
 	} else {
 		X = jumpCell - GS.colOffset;
 	}
