@@ -14,14 +14,15 @@
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define MOUSE_EVENT(flag) ((state & flag))
 #define MOUSE_FLAGS (BUTTON1_CLICKED | BUTTON4_PRESSED | BUTTON5_PRESSED)
-#define TAB_SIZE 2
+#define TABSIZE 2
+typedef unsigned int uint;
 
 /*** Data ***/
 /*
  *	Represents one line in the open file
  */
 typedef struct Line {
-	unsigned int len;
+	uint len;
 	char *text;
 } Line;
 
@@ -29,7 +30,7 @@ typedef struct Line {
  *	Represents the open file, line by line
  */
 typedef struct FileData {
-	unsigned int numLines;
+	uint numLines;
 	Line *lines;
 } FileData;
 
@@ -38,12 +39,12 @@ typedef struct FileData {
  */
 typedef struct GlobalState {
 	FileData *data;
-	unsigned int maxX;
-	unsigned int maxY;
-	unsigned int lineOffset;
-	unsigned int colOffset;
-	unsigned int cursX;
-	unsigned int cursY;
+	uint maxX;
+	uint maxY;
+	uint lineOffset;
+	uint colOffset;
+	uint cursX;
+	uint cursY;
 	bool dirtyEditor;
 } GlobalState;
 
@@ -178,7 +179,7 @@ char processInput() {
 
 /*** Editor management ***/
 void scrollEditor(int amt) {
-	unsigned int temp = GS.lineOffset + amt;
+	uint temp = GS.lineOffset + amt;
 	//Underflow
 	if (amt < 0 && temp > GS.lineOffset) {
 		GS.lineOffset = 0;
@@ -198,12 +199,12 @@ void panEditor(int amt) {
 }
 
 void moveCursor(int dy, int dx) {
-	unsigned int newY = GS.cursY + dy;
-	unsigned int newX = GS.cursX + dx;
-	unsigned int currLine = GS.cursY + GS.lineOffset;
-	unsigned int currCol = GS.cursX + GS.colOffset;
-	unsigned int newLine = newY + GS.lineOffset;
-	unsigned int newCol = newX + GS.colOffset;
+	uint newY = GS.cursY + dy;
+	uint newX = GS.cursX + dx;
+	uint currLine = GS.cursY + GS.lineOffset;
+	uint currCol = GS.cursX + GS.colOffset;
+	uint newLine = newY + GS.lineOffset;
+	uint newCol = newX + GS.colOffset;
 
 	if (dy < 0 && newY > GS.cursY) { //moved cursor above screen
 		newY = 0;
@@ -226,12 +227,12 @@ void moveCursor(int dy, int dx) {
 }
 
 void moveCursorOld(int dy, int dx) {
-	unsigned int newY = GS.cursY + dy;
-	unsigned int newX = GS.cursX + dx;
-	unsigned int currLine = GS.cursY + GS.lineOffset; //in file
-	unsigned int currCol = GS.cursX + GS.colOffset; //in file
+	uint newY = GS.cursY + dy;
+	uint newX = GS.cursX + dx;
+	uint currLine = GS.cursY + GS.lineOffset; //in file
+	uint currCol = GS.cursX + GS.colOffset; //in file
 
-	unsigned int newLine = newY + GS.lineOffset;
+	uint newLine = newY + GS.lineOffset;
 
 	if (newLine == GS.data->numLines + 1) { //end of file
 		newY = GS.cursY; //Just past last line visually
@@ -266,60 +267,54 @@ void moveCursorOld(int dy, int dx) {
 	return;
 }
 
+uint nextTabCol(uint currCol) {
+	return ( (uint)(currCol / TABSIZE) + 1) * TABSIZE;
+}
+
 void updateEditor() {
 	getmaxyx(stdscr, GS.maxY, GS.maxX);
 	wmove(stdscr, 0, 0);
 	wclear(stdscr);
 
-	for (unsigned int i = 0; i < GS.maxY; i++) {
-		unsigned int currLine = i + GS.lineOffset;
-		move(i, 0); //move to start of line
+	for (uint i = 0; i < GS.maxY; i++) {
+		uint currLine = i + GS.lineOffset;
+		wmove(stdscr, i, 0);
 		if (currLine >= GS.data->numLines) {
-			waddch(stdscr, '~'); //past EOF
+			waddch(stdscr, '~');
 		} else {
-			unsigned int cellLen = 0;
-			for (unsigned int j = 0; j < (GS.data->lines[currLine].len - 1); j++) {
-				char ch = GS.data->lines[currLine].text[j];
-				cellLen += ((ch == '\t') ? TAB_SIZE : 1);
+			Line *line = (GS.data->lines + currLine);
+			uint cellConsumed = 0;
+			uint idx = 0;
+
+			while (cellConsumed < GS.colOffset && idx < (line->len - 1)) {
+				if (line->text[idx] == '\t') {
+					uint tabCol = nextTabCol(cellConsumed);
+					cellConsumed += (tabCol - cellConsumed);
+					idx++;
+				} else {
+					idx++;
+					cellConsumed++;
+				}
 			}
-			if (GS.colOffset < cellLen) {
-				Line *line = &(GS.data->lines[currLine]);
-				unsigned int cellConsumed = 0;
-				unsigned int idx = 0;
-				bool midTab = false;
-				while (cellConsumed < GS.colOffset) {
-					if (line->text[idx] == '\t') {
-						cellConsumed++;
-						if (midTab) {
-							idx++;
-							midTab = false;
-						} else {
-							midTab = true;
-						}
-					} else {
-						cellConsumed++;
-						idx++;
-					}
-				}
 
-				unsigned int cell = 0;
-				for (; idx < line->len-1; idx++) {
-					char ch = line->text[idx];
-					if (ch == '\t' && midTab) {
-						mvwaddch(stdscr, i, cell++, ' ');
-						midTab = false;
-					} else if (ch == '\t') {
-						mvwaddch(stdscr, i, cell++, ' ');
-						mvwaddch(stdscr, i, cell++, ' ');
-					} else {
-						mvwaddch(stdscr, i, cell++, ch);
-					}
-				}
+			uint currCol = 0;
+			//Only happens when last character hit was a tab
+			if (cellConsumed > GS.colOffset) {
+				currCol = cellConsumed - GS.colOffset;
+				wmove(stdscr, i, currCol);
+			}
 
+			//Print the rest of the line
+			for (; idx < (line->len - 1); idx++) {
+				char ch = line->text[idx];
+				if (ch == '\t') {
+					currCol = nextTabCol(currCol);
+				} else {
+					mvwaddch(stdscr, i, currCol++, ch);
+				}
 			}
 		}
 	}
-
 
 	refresh();
 	wmove(stdscr, GS.cursY, GS.cursX);

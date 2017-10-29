@@ -7,10 +7,10 @@ SRCS = wim.c
 MAIN = wim
 
 $(MAIN): $(SRCS)
-	$(CC) $(SRCS) -o $(MAIN) $(CFLAGS) -g $(LINKS)
+	$(CC) $(SRCS) -o bin/$(MAIN) $(CFLAGS) -g $(LINKS)
 
 prod: $(SRCS)
-	$(CC) $(SRCS) -o $(MAIN) $(CFLAGS) -O3 $(LINKS)
+	$(CC) $(SRCS) -o bin/$(MAIN) $(CFLAGS) -O3 $(LINKS)
 
 clean:
 	rm $(MAIN)
