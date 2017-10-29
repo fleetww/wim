@@ -46,6 +46,7 @@ typedef struct GlobalState {
 	uint cursX;
 	uint cursY;
 	bool dirtyEditor;
+	enum modes {editor, command} mode;
 } GlobalState;
 
 GlobalState GS;
@@ -101,7 +102,7 @@ void init() {
 	GS.cursY = 0;
 	GS.colOffset = 0;
 	GS.dirtyEditor = false;
-
+	GS.mode = editor;
 	return;
 }
 
@@ -167,10 +168,10 @@ char processInput() {
 			moveCursor(1, 0);
 			break;
 		case KEY_LEFT:
-			moveCursor(0, -1);
+			moveCursorLeft();
 			break;
 		case KEY_RIGHT:
-			moveCursor(0, 1);
+			moveCursorRight();
 			break;
 	}
 
@@ -193,7 +194,93 @@ void scrollEditor(int amt) {
 	return;
 }
 
-void panEditor(int amt) {
+
+void moveCursorLeft() {
+	uint X = GS.cursX;
+	uint Y = GS.cursY;
+	uint currLine = Y + GS.lineOffset;
+	Line *line = (GS.data->lines + currLine);
+
+	uint cellLen = 0;
+	uint jumpCell; //cell we are going to jump left to
+	uint prevCellLen = 0;
+	for (uint i = 0; i < (line->len - 1); i++) {
+		if (cellLen == (GS.colOffset + X)) {
+			jumpCell = prevCellLen;
+			break;
+		}
+
+		prevCellLen = cellLen;
+		char ch = line->text[i];
+		if (ch == '\t') {
+			cellLen = nextTabCol(cellLen);
+		} else {
+			cellLen++;
+		}
+
+		if (cellLen == (GS.colOffset + X)) {
+			jumpCell = prevCellLen;
+			break;
+		}
+	}
+
+	if (jumpCell < GS.colOffset) {
+		//pan left necessary amount, set X=0
+		X = 0;
+		GS.colOffset -= jumpCell;
+	} else {
+		X = jumpCell - GS.colOffset;
+	}
+
+	GS.cursX = X;
+	wmove(stdscr, Y, X);
+
+	return;
+}
+
+void moveCursorRight() {
+	uint X = GS.cursX;
+	uint Y = GS.cursY;
+	uint currLine = Y + GS.lineOffset;
+	Line *line = (GS.data->lines + currLine);
+
+	uint cellLen = 0;
+	uint jumpCell; //cell we are going to jump right to
+	uint prevCellLen = 0;
+	bool endOfText = false; //cursor already at end of text
+	for (uint i = 0; i < (line->len - 1); i++) {
+		prevCellLen = cellLen;
+
+		char ch = line->text[i];
+		if (ch == '\t') {
+			cellLen = nextTabCol(cellLen);
+		} else {
+			cellLen++;
+		}
+
+		if (prevCellLen == (GS.colOffset + X)) { //we were previously at current char
+			jumpCell = cellLen;
+			break;
+		}
+
+		endOfText = ((i + 1) == (line->len - 1));
+	}
+
+	if (endOfText) {
+		GS.cursX = X;
+		wmove(stdscr, Y, X);
+		return;
+	}
+
+	if ((jumpCell - GS.colOffset) >= GS.maxX) { //next char is past screen
+		GS.colOffset += jumpCell;
+		X = 0; //a little ugly visually, but it does work
+	} else {
+		X = jumpCell - GS.colOffset;
+	}
+
+	GS.cursX = X;
+	wmove(stdscr, Y, X);
 
 	return;
 }
@@ -267,7 +354,7 @@ void moveCursorOld(int dy, int dx) {
 	return;
 }
 
-uint nextTabCol(uint currCol) {
+unsigned int nextTabCol(unsigned int currCol) {
 	return ( (uint)(currCol / TABSIZE) + 1) * TABSIZE;
 }
 
@@ -276,7 +363,7 @@ void updateEditor() {
 	wmove(stdscr, 0, 0);
 	wclear(stdscr);
 
-	for (uint i = 0; i < GS.maxY; i++) {
+	for (uint i = 0; i < GS.maxY - 2; i++) {
 		uint currLine = i + GS.lineOffset;
 		wmove(stdscr, i, 0);
 		if (currLine >= GS.data->numLines) {
@@ -288,8 +375,7 @@ void updateEditor() {
 
 			while (cellConsumed < GS.colOffset && idx < (line->len - 1)) {
 				if (line->text[idx] == '\t') {
-					uint tabCol = nextTabCol(cellConsumed);
-					cellConsumed += (tabCol - cellConsumed);
+					cellConsumed = nextTabCol(cellConsumed);
 					idx++;
 				} else {
 					idx++;

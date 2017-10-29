@@ -22,6 +22,9 @@ void loadFile(char *filename);
 char processInput();
 
 //Editor management
+unsigned int nextTabCol(unsigned int currCol);
 void moveCursor(int dy, int dx);
+void moveCursorLeft();
+void moveCursorRight();
 void scrollEditor(int amt);
 void updateEditor();
