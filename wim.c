@@ -303,7 +303,9 @@ void moveCursorDown() {
 	uint cellLen = 0;
 	uint prevCellLen = 0;
 	uint jumpCell = 0;
-	for (uint i = 0; i < (line->len - 1); i++) {
+	//last line might have no \n char, so we must alter range
+	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	for (uint i = 0; i < lineLen; i++) {
 		char ch = line->text[i];
 
 		prevCellLen = cellLen;
@@ -350,7 +352,9 @@ void moveCursorLeft() {
 	uint cellLen = 0;
 	uint jumpCell; //cell we are going to jump left to
 	uint prevCellLen = 0;
-	for (uint i = 0; i < (line->len - 1); i++) {
+	//last line might have no \n char, so we must alter range
+	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	for (uint i = 0; i < lineLen; i++) {
 		if (cellLen == (GS.colOffset + X)) {
 			jumpCell = prevCellLen;
 			break;
@@ -397,8 +401,10 @@ void moveCursorRight() {
 	uint cellLen = 0;
 	uint jumpCell; //cell we are going to jump right to
 	uint prevCellLen = 0;
-	bool endOfText = false; //cursor already at end of text
-	for (uint i = 0; i < (line->len - 1); i++) {
+	bool endOfLine = false; //cursor already at end of line
+	//last line might have no \n char, so we must alter range
+	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	for (uint i = 0; i < lineLen; i++) {
 		prevCellLen = cellLen;
 
 		char ch = line->text[i];
@@ -413,10 +419,10 @@ void moveCursorRight() {
 			break;
 		}
 
-		endOfText = ((i + 1) == (line->len - 1));
+		endOfLine = ((i + 1) == lineLen);
 	}
 
-	if (endOfText) {
+	if (endOfLine) {
 		GS.cursX = X;
 		wmove(stdscr, Y, X);
 		return;
@@ -480,11 +486,11 @@ void updateEditor() {
 			}
 
 			//Print the rest of the line
-			for (; idx < (line->len - 1); idx++) {
+			for (; idx < (line->len); idx++) {
 				char ch = line->text[idx];
 				if (ch == '\t') {
 					currCol = nextTabCol(currCol);
-				} else {
+				} else if (ch != '\n') {
 					mvwaddch(stdscr, i, currCol++, ch);
 				}
 			}
