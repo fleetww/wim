@@ -21,7 +21,11 @@ void loadFile(char *filename);
 
 //User I/O
 char processInput();
+void handleEnterKey();
 void insert(char ch);
+
+//Helper functions
+unsigned int getCurrentIndexInLine();
 
 //Editor management
 unsigned int nextTabCol(unsigned int currCol);
