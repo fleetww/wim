@@ -179,6 +179,8 @@ char processInput() {
 		case KEY_RIGHT:
 			moveCursorRight();
 			break;
+		case '\n':
+			handleEnterKey();
 		default:
 			insert(ch);
 	}
@@ -186,24 +188,64 @@ char processInput() {
 	return 0;
 }
 
+
 /*
  *	Takes the char ch and inserts it into the current place in line
  */
 void insert(char ch) {
 	//Ignore anything that is not one of these
-	if (!(ch == isgraph(ch) || ch == ' ' || ch == '\t' || ch == '\n')) {
+	if (!(ch == isgraph(ch) || ch == ' ' || ch == '\t')) {
 		return;
 	}
 
-	uint X = GS.cursX;
-	uint Y = GS.cursY;
-	uint lineOffset = GS.lineOffset;
-	uint colOffset = GS.colOffset;
-	uint currLine = lineOffset + Y;
-	uint currCell = colOffset + X;
+
+
+	return;
+}
+
+/*
+ *	Either splits the current line in two, divided by the cursor. Or it will
+ *	execute the built up command
+ *	TODO command execution
+ */
+void handleEnterKey() {
+	uint currLine = (GS.lineOffset + GS.cursY);
+	Line *tempLine = (GS.data->lines + currLine);
+
+	//We must now split the line, inserting a new Line into the data
+	GS.data->lines = realloc(GS.data->lines, sizeof(Line) * (GS.data->numLines + 1));
+	Line *src = (GS.data->lines + currLine + 1);
+	Line *dest = src + 1;
+	uint numBytes = (GS.data->numLines - 1 - currLine);
+	//move the remaining lines over by (sizeOf(Line)) bytes
+	memmove(dest, src, numBytes);
+
+	uint idx = getCurrentIndexInLine(); //current index in current line->text
+
+	Line *newLine = tempLine + 1;
+	newLine->len = (tempLine->len + 1) - idx;
+	newLine->text = malloc(newLine->len);
+	memcpy(newLine->text, tempLine->text+idx, newLine->len);
+	char *newText = malloc(idx+1);
+	memcpy(newText, tempLine->text, idx);
+	newText[idx] = '\n';
+	free(tempLine->text);
+	tempLine->text = newText;
+
+	return;
+}
+
+/*** Helper Functions ***/
+
+/*
+ *	Returns the index in the current line that the cursor is currently in
+ */
+unsigned int getCurrentIndexInLine() {
+	uint currCell = GS.colOffset + GS.cursX;
+	uint currLine = GS.lineOffset + GS.cursY;
 	Line *line = (GS.data->lines + currLine);
 
-	uint idx; //index that we are currently in in the line
+	uint idx;
 	uint tempCell = 0;
 	//last line might have no \n char, so we must alter range
 	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
@@ -222,25 +264,14 @@ void insert(char ch) {
 		}
 	}
 
-	//We must now split the line, inserting a new Line into the data
-	GS.data->lines = realloc(GS.data->lines, sizeof(Line) * (GS.data->numLines));
-	Line *src = (GS.data->lines + currLine + 1);
-	Line *dest = src + 1;
-	uint numBytes = (GS.data->numLines - 1 - currLine);
-	//move the remaining lines over by one
-	memmove((void *)dest, (void *)src, (size_t)numBytes);
+	return idx;
+}
 
-	Line *newLine = line + 1;
-	newLine->len = (line->len + 1) - idx;
-	newLine->text = malloc(newLine->len);
-	memcpy(newLine->text, line->text+idx, newLine->len);
-	char *newText = malloc(idx+1);
-	memcpy(newText, line->text, idx);
-	newText[idx] = '\n';
-	free(line->text);
-	line->text = newText;
-
-	return;
+/*
+ *	Just gives next tab collumn
+ */
+unsigned int nextTabCol(unsigned int currCol) {
+	return ( (uint)(currCol / TABSIZE) + 1) * TABSIZE;
 }
 
 /*** Editor management ***/
@@ -497,12 +528,6 @@ void moveCursorRight() {
 }
 
 
-/*
- *	Helper function, just gives next tab collumn
- */
-unsigned int nextTabCol(unsigned int currCol) {
-	return ( (uint)(currCol / TABSIZE) + 1) * TABSIZE;
-}
 
 /*
  *	Prints text file to the screen, using offsets to fit correct info in screen
