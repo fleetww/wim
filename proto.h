@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 
 /*	Prototypes	*/
@@ -20,6 +21,7 @@ void loadFile(char *filename);
 
 //User I/O
 char processInput();
+void insert(char ch);
 
 //Editor management
 unsigned int nextTabCol(unsigned int currCol);
