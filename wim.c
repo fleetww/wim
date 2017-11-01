@@ -159,18 +159,13 @@ void loadFile(char *filename) {
 char processInput() {
 	int ch = wgetch(stdscr);
 	switch (ch) {
+		//Ignored keys
+		case KEY_NPAGE:
+		case KEY_PPAGE:
 		case KEY_MOUSE:
 			break;
 		case CTRL_KEY('c'):
 			return 2;
-			break;
-		case KEY_NPAGE:
-			scrollEditor((int) (GS.maxY/2));
-			GS.dirtyEditor = true;
-			break;
-		case KEY_PPAGE:
-			scrollEditor(-1 * (GS.maxY/2));
-			GS.dirtyEditor = true;
 			break;
 		case KEY_UP:
 			moveCursorUp();
@@ -184,9 +179,68 @@ char processInput() {
 		case KEY_RIGHT:
 			moveCursorRight();
 			break;
+		default:
+			insert(ch);
 	}
 
 	return 0;
+}
+
+/*
+ *	Takes the char ch and inserts it into the current place in line
+ */
+void insert(char ch) {
+	//Ignore anything that is not one of these
+	if (!(ch == isgraph(ch) || ch == ' ' || ch == '\t' || ch == '\n')) {
+		return;
+	}
+
+	uint X = GS.cursX;
+	uint Y = GS.cursY;
+	uint lineOffset = GS.lineOffset;
+	uint colOffset = GS.colOffset;
+	uint currLine = lineOffset + Y;
+	uint currCell = colOffset + X;
+	Line *line = (GS.data->lines + currLine);
+
+	uint idx; //index that we are currently in in the line
+	uint tempCell = 0;
+	//last line might have no \n char, so we must alter range
+	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	for (uint i = 0; i < lineLen; i++) {
+		char ch = line->text[i];
+
+		if (tempCell == currCell) {
+			idx = i;
+			break;
+		}
+
+		if (ch == '\t') {
+			tempCell = nextTabCol(tempCell);
+		} else {
+			tempCell++;
+		}
+	}
+
+	//We must now split the line, inserting a new Line into the data
+	GS.data->lines = realloc(GS.data->lines, sizeof(Line) * (GS.data->numLines));
+	Line *src = (GS.data->lines + currLine + 1);
+	Line *dest = src + 1;
+	uint numBytes = (GS.data->numLines - 1 - currLine);
+	//move the remaining lines over by one
+	memmove((void *)dest, (void *)src, (size_t)numBytes);
+
+	Line *newLine = line + 1;
+	newLine->len = (line->len + 1) - idx;
+	newLine->text = malloc(newLine->len);
+	memcpy(newLine->text, line->text+idx, newLine->len);
+	char *newText = malloc(idx+1);
+	memcpy(newText, line->text, idx);
+	newText[idx] = '\n';
+	free(line->text);
+	line->text = newText;
+
+	return;
 }
 
 /*** Editor management ***/
