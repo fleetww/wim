@@ -18,11 +18,14 @@ void init();
 //File I/O
 void dataAppendLine(char *newtext, size_t length);
 void loadFile(char *filename);
+void writeToFile();
 
 //User I/O
 char processInput();
 void handleEnterKey();
 void insert(char ch);
+void insertNewLine();
+void commandExecution();
 
 //Helper functions
 unsigned int getCurrentIndexInLine();
