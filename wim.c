@@ -151,6 +151,11 @@ void loadFile(char *filename) {
 	return;
 }
 
+void writeToFile() {
+
+	return;
+}
+
 /*** User I/O ***/
 
 /*
@@ -167,6 +172,9 @@ char processInput() {
 		case CTRL_KEY('c'):
 			return 2;
 			break;
+		case CTRL_KEY('s'):
+			writeToFile();
+			break;
 		case KEY_UP:
 			moveCursorUp();
 			break;
@@ -179,8 +187,9 @@ char processInput() {
 		case KEY_RIGHT:
 			moveCursorRight();
 			break;
-		case '\n':
+		case 13:
 			handleEnterKey();
+			break;
 		default:
 			insert(ch);
 	}
@@ -209,6 +218,28 @@ void insert(char ch) {
  *	TODO command execution
  */
 void handleEnterKey() {
+	if (GS.mode == editor) {
+		insertNewLine();
+	} else if (GS.mode == command) {
+		commandExecution();
+	}
+
+	return;
+}
+
+/*
+ *	Executes the built up command
+ */
+void commandExecution() {
+	return;
+}
+
+/*
+ *	Splits the current line in two, dividing by the cursor
+ * 	TODO handle begging and end of line edge cases
+ */
+void insertNewLine() {
+
 	uint currLine = (GS.lineOffset + GS.cursY);
 	Line *tempLine = (GS.data->lines + currLine);
 
@@ -223,7 +254,7 @@ void handleEnterKey() {
 	uint idx = getCurrentIndexInLine(); //current index in current line->text
 
 	Line *newLine = tempLine + 1;
-	newLine->len = (tempLine->len + 1) - idx;
+	newLine->len = tempLine->len - idx;
 	newLine->text = malloc(newLine->len);
 	memcpy(newLine->text, tempLine->text+idx, newLine->len);
 	char *newText = malloc(idx+1);
@@ -231,6 +262,14 @@ void handleEnterKey() {
 	newText[idx] = '\n';
 	free(tempLine->text);
 	tempLine->text = newText;
+	tempLine->len = idx + 1;
+
+	//move the cursor down, beginning of the line
+	moveCursorDown();
+	GS.cursX = 0;
+	GS.colOffset = 0;
+
+	GS.dirtyEditor = true;
 
 	return;
 }
