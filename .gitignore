@@ -2,3 +2,4 @@ bin/
 *.o
 test
 Session.vim
+log
