@@ -1,5 +1,4 @@
 bin/
 *.o
-test
+test/*
 Session.vim
-log
