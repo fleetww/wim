@@ -4,13 +4,10 @@ LINKS = -lpanel -lncurses
 
 SRCS = wim.c
 
-MAIN = wim
+MAIN = bin/wim
 
 $(MAIN): $(SRCS)
-	$(CC) $(SRCS) -o bin/$(MAIN) $(CFLAGS) -g $(LINKS)
+	$(CC) $(SRCS) -o $(MAIN) $(CFLAGS) -g $(LINKS)
 
 prod: $(SRCS)
-	$(CC) $(SRCS) -o bin/$(MAIN) $(CFLAGS) -O3 $(LINKS)
-
-clean:
-	rm $(MAIN)
+	$(CC) $(SRCS) -o $(MAIN) $(CFLAGS) -O3 $(LINKS)
