@@ -15,6 +15,10 @@
 #define MOUSE_EVENT(flag) ((state & flag))
 #define MOUSE_FLAGS (BUTTON1_CLICKED | BUTTON4_PRESSED | BUTTON5_PRESSED)
 #define TABSIZE 2
+
+#define ERRORLOGPATH "/tmp/wim.err"
+FILE *errorlog;
+
 typedef unsigned int uint;
 
 /*** Data ***/
@@ -48,6 +52,7 @@ typedef struct GlobalState {
 	uint cursY;
 	bool dirtyEditor;
 	enum modes {editor, command} mode;
+	char *filename;
 } GlobalState;
 
 GlobalState GS;
@@ -65,10 +70,10 @@ void closingTime() {
 }
 
 /*
- *	Probably going to call it a lot, ;)
+ *	Used to write to error, depracated
  */
 void fatalErr(const char *str, int eval) {
-	perror(str);
+	fwrite(str, strlen(str), 1, errorlog);
 	exit(eval);
 
 	return;
@@ -77,7 +82,7 @@ void fatalErr(const char *str, int eval) {
 /*
  *	Sets up the initial environment and allocating starting space
  */
-void init() {
+void init(char **argv) {
 	atexit(closingTime);
 	putenv("NCURSES_NO_HARD_TABS=false");
 	setlocale(LC_ALL, "");
@@ -91,9 +96,12 @@ void init() {
 
 	errno = 0;
 
+	errorlog = fopen(ERRORLOGPATH, "a+");
 	if (!(GS.data = malloc(sizeof(FileData)))) {
-		fatalErr("malloc", 1);
+		fprintf(errorlog, "Could not get needed space to store file data\n");
+		exit(1);
 	}
+
 
 	GS.data->numLines = 0;
 	GS.maxX = 0;
@@ -104,6 +112,7 @@ void init() {
 	GS.colOffset = 0;
 	GS.dirtyEditor = false;
 	GS.mode = editor;
+	GS.filename = strdup(argv[1]);
 	return;
 }
 
@@ -127,7 +136,8 @@ void dataAppendLine(char *newtext, size_t length) {
 void loadFile(char *filename) {
 	FILE *file = fopen(filename, "r");
 	if (!file) {
-		fatalErr("loadFile:fopen", 1);
+		fprintf(errorlog, "Could not open specified file: %s\n", filename);
+		exit(1);
 	}
 
 	char *buf = NULL;
@@ -142,7 +152,8 @@ void loadFile(char *filename) {
 	}
 
 	if (errno) {
-		fatalErr("loadFile:getline", 1);
+		fprintf(errorlog, "Could not read a line from: %s\n", filename);
+		exit(1);
 	}
 
 	free(buf);
@@ -152,6 +163,18 @@ void loadFile(char *filename) {
 }
 
 void writeToFile() {
+	int fd = open(GS.filename, O_CREAT|O_TRUNC|O_WRONLY);
+
+	for (uint i = 0; i < GS.data->numLines; i++) {
+		Line *currLine = GS.data->lines + i;
+		int amt = 0;
+		while ((amt = write(fd, currLine->text + amt, currLine->len - amt)) != 0) {
+			if (amt == -1) {
+				fprintf(errorlog, "Could not write to file: %s\n", GS.filename);
+				exit(1);
+			}
+		}
+	}
 
 	return;
 }
@@ -236,22 +259,30 @@ void commandExecution() {
 
 /*
  *	Splits the current line in two, dividing by the cursor
- * 	TODO handle begging and end of line edge cases
+ * 	TODO handle end of line edge cases
  */
 void insertNewLine() {
 
 	uint currLine = (GS.lineOffset + GS.cursY);
-	Line *tempLine = (GS.data->lines + currLine);
 
 	//We must now split the line, inserting a new Line into the data
 	GS.data->lines = realloc(GS.data->lines, sizeof(Line) * (GS.data->numLines + 1));
-	Line *src = (GS.data->lines + currLine + 1);
-	Line *dest = src + 1;
-	uint numBytes = (GS.data->numLines - 1 - currLine);
-	//move the remaining lines over by (sizeOf(Line)) bytes
-	memmove(dest, src, numBytes);
+
+	//If we are at the last line, we have nothing to move over
+	if (currLine != GS.data->numLines - 1) {
+		Line *src = (GS.data->lines + currLine + 1);
+		Line *dest = src + 1;
+		uint numBytes = (GS.data->numLines - 1 - currLine) * sizeof(Line *);
+
+		//move the remaining lines over by (sizeOf(Line)) bytes
+		memmove(dest, src, numBytes);
+	}
+
+	GS.data->numLines++;
 
 	uint idx = getCurrentIndexInLine(); //current index in current line->text
+
+	Line *tempLine = (GS.data->lines + currLine);
 
 	Line *newLine = tempLine + 1;
 	newLine->len = tempLine->len - idx;
@@ -287,7 +318,8 @@ unsigned int getCurrentIndexInLine() {
 	uint idx;
 	uint tempCell = 0;
 	//last line might have no \n char, so we must alter range
-	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	uint lineLen = (line->text[line->len-1] != '\n') ? line->len : line->len - 1;
+
 	for (uint i = 0; i < lineLen; i++) {
 		char ch = line->text[i];
 
@@ -300,6 +332,11 @@ unsigned int getCurrentIndexInLine() {
 			tempCell = nextTabCol(tempCell);
 		} else {
 			tempCell++;
+		}
+
+		if (tempCell == currCell) {
+			idx = i + 1;
+			break;
 		}
 	}
 
@@ -364,7 +401,10 @@ void moveCursorUp() {
 	uint cellLen = 0;
 	uint prevCellLen = 0;
 	uint jumpCell = 0;
-	for (uint i = 0; i < (line->len - 1); i++) {
+	//Want to get up to last char
+	uint lineLen = (line->text[line->len-1] != '\n') ? line->len : line->len - 1;
+
+	for (uint i = 0; i < lineLen; i++) {
 		char ch = line->text[i];
 
 		prevCellLen = cellLen;
@@ -398,6 +438,7 @@ void moveCursorUp() {
 	return;
 }
 
+
 /*
  *	Moves the cursor down by one line, scrolling, and moving cursor
  *	appropriately in new line
@@ -407,6 +448,7 @@ void moveCursorDown() {
 	uint Y = GS.cursY;
 	uint currLine = Y + GS.lineOffset;
 	Line *line = (GS.data->lines + currLine);
+
 
 	if (currLine == (GS.data->numLines - 1)) { //one past last line
 		return;
@@ -428,7 +470,7 @@ void moveCursorDown() {
 	uint prevCellLen = 0;
 	uint jumpCell = 0;
 	//last line might have no \n char, so we must alter range
-	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	uint lineLen = (line->text[line->len-1] != '\n') ? line->len : line->len - 1;
 	for (uint i = 0; i < lineLen; i++) {
 		char ch = line->text[i];
 
@@ -477,7 +519,7 @@ void moveCursorLeft() {
 	uint jumpCell; //cell we are going to jump left to
 	uint prevCellLen = 0;
 	//last line might have no \n char, so we must alter range
-	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	uint lineLen = (line->text[line->len-1] != '\n') ? line->len : line->len - 1;
 	for (uint i = 0; i < lineLen; i++) {
 		if (cellLen == (GS.colOffset + X)) {
 			jumpCell = prevCellLen;
@@ -527,7 +569,7 @@ void moveCursorRight() {
 	uint prevCellLen = 0;
 	bool endOfLine = false; //cursor already at end of line
 	//last line might have no \n char, so we must alter range
-	uint lineLen = (currLine == (GS.data->numLines-1)) ? line->len : line->len-1;
+	uint lineLen = (line->text[line->len-1] != '\n') ? line->len : line->len - 1;
 	for (uint i = 0; i < lineLen; i++) {
 		prevCellLen = cellLen;
 
@@ -622,12 +664,13 @@ void updateEditor() {
 }
 
 int main(int argc, char **argv) {
-	init();
+	init(argv);
 
 	if (argc == 2) {
 		loadFile(argv[1]);
 	} else {
-		fatalErr("No file given", 23);
+		fprintf(errorlog, "No file given");
+		exit(23);
 	}
 
 	//Need to print to screen atleast once
