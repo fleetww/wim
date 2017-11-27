@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -pedantic
 LINKS = -lpanel -lncurses
 
-SRCS = wim.c
+SRCS = src/wim.c
 
 MAIN = bin/wim
 
