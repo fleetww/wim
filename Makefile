@@ -4,7 +4,7 @@ LINKS = -lpanel -lncurses
 
 SRCS = src/wim.c
 
-MAIN = bin/wim
+MAIN = wim
 
 $(MAIN): $(SRCS)
 	$(CC) $(SRCS) -o $(MAIN) $(CFLAGS) -g $(LINKS)

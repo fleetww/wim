@@ -1,4 +1,4 @@
-bin/
+wim
 *.o
 test/*
 Session.vim
