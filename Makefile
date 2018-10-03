@@ -11,3 +11,6 @@ $(MAIN): $(SRCS)
 
 prod: $(SRCS)
 	$(CC) $(SRCS) -o $(MAIN) $(CFLAGS) -O3 $(LINKS)
+
+clean:
+	rm wim
